@@ -1,0 +1,325 @@
+The following code implements multiple dispatch using an extension of
+Pescio's code in http:// www.eptacom.net/ pubblicazioni/ pub_eng/
+multdisp.cpp.
+
+The classes and functions in the Pescio's code were renamed in order
+to emphasize the relationship with the normal Visitor pattern.  In
+particular, the classes in Pescio's code are both acceptors and
+visitors, unlike the normal Visitor pattern where there is a heirarchy
+of acceptor classes and another of Visitor classes.
+
+The correspondence between the class names in Pescio's code and the
+following code are:
+
+Pescio's  Here
+========  ====
+Base      AcceptorVisitor
+Target    Visitor
+F         AcceptOk
+f         accept
+f_impl    visit
+DF        DAcceptor
+dispF     dispAccept
+
+This code compiles and runs OK with gcc2.95.2.
+---------------------------- the code --------------------------------
+// The following is a renamed version of Pescio's code.
+#include <iostream>
+#include <typeinfo>
+
+// Shared header file
+
+class AcceptorVisitor
+  {
+  public :
+    typedef AcceptorVisitor Parent ;
+    virtual ~AcceptorVisitor() {} ;
+    virtual void accept( AcceptorVisitor& b ) = 0 ;
+  } ;
+
+  template< class Acceptor_T > 
+class Visitor 
+  {
+  public :
+    virtual void visit( Acceptor_T& ) = 0 ;
+  } ;
+
+
+  template< class P > 
+class DAcceptor
+  {
+  public :
+          template< class Acceptor_T > 
+          static 
+        void 
+      dispAccept( Acceptor_T& t, AcceptorVisitor& b )
+        ;
+  } ;
+
+
+  template<> 
+class DAcceptor< AcceptorVisitor >
+  {
+  public :
+           template< class Acceptor_T >  
+           static 
+        void 
+      dispAccept( Acceptor_T& t, AcceptorVisitor& b )
+        {
+        throw bad_cast() ;
+        }
+  } ;
+
+  template< class Acceptor_T > 
+class AcceptOk 
+  : virtual public AcceptorVisitor
+  {
+  public :
+    void accept( AcceptorVisitor& a_visitor )
+      {
+      typedef Visitor< Acceptor_T > VisitorT ;
+      VisitorT* visitor_t = dynamic_cast< VisitorT* >(&a_visitor) ;
+      Acceptor_T& me = static_cast<Acceptor_T&>(*this) ;
+      if( visitor_t )
+        visitor_t-> visit( me ) ;
+      else
+        {
+        typedef typename Acceptor_T::Parent TParent ;
+        DAcceptor< TParent >::dispAccept( me, a_visitor ) ;
+        }
+      }
+  } ;
+
+class AcceptOk< AcceptorVisitor >
+  {
+  public :
+    void accept( AcceptorVisitor& )
+      {
+      throw bad_cast() ;
+      }
+  } ;
+
+  template< class P > template< class Acceptor_T > 
+void DAcceptor<P>::dispAccept( Acceptor_T& t, AcceptorVisitor& a_visitor )
+      {
+      t.AcceptOk< P >::accept( a_visitor ) ;
+         // static bind (accept is virtual)
+      } 
+// Project-specific file
+
+class B ;  class C ;
+class A : public AcceptOk< A >, 
+          public Visitor< A >,
+          public Visitor< B >,
+          public Visitor< C >
+  {
+  public :
+    void visit( A& ) 
+      { cout << "A-A" << endl ; }
+    void visit( B& ) 
+      { cout << "A-B" << endl ; }
+    void visit( C& ) 
+      { cout << "A-C" << endl ; }
+  } ;
+
+class B : public AcceptOk< B >,
+          public Visitor< A >,
+          public Visitor< B >
+  {
+  public :
+    void visit( A& ) 
+      { cout << "B-A" << endl ; }
+    void visit( B& ) 
+      { cout << "B-B" << endl ; }  
+  } ;
+
+class C : public AcceptOk< C >, public A
+  {
+  public :
+    typedef A Parent  ;
+    void accept( AcceptorVisitor& b ) 
+      { AcceptOk<C>::accept(b) ; } 
+    void visit( A& ) 
+      { cout << "C-A" << endl ; }
+    void visit( C& ) 
+      { cout << "C-C" << endl ; }  
+  } ;
+//
+//  The following used for N-dispatch
+//
+template
+  < unsigned NARG
+  >
+struct Visitor_N
+  //Specializations contain visit methods taking NARG arguments.
+  ;
+template
+  <
+  >
+struct Visitor_N
+  < 3
+  >
+  {
+      AcceptorVisitor*
+    m_args[3]
+      ;
+      void
+    print3
+      ( AcceptorVisitor& x
+      , AcceptorVisitor& y
+      , AcceptorVisitor& z
+      )
+      { cout
+        <<"visit( "
+        <<typeid(x).name()
+        <<", "
+        <<typeid(y).name()
+        <<", "
+        <<typeid(z).name()
+        <<" )"<<endl
+      ;}
+        virtual
+      void
+    visit(A& x,A& y,A& z)
+      { print3(x,y,z)
+      ;}
+			
+		//You can also include any visit with any permutation of arg types
+		//here.
+		
+	      virtual
+	    void
+	  visit(AcceptorVisitor& x,AcceptorVisitor& y,AcceptorVisitor& z)
+		  { print3(x,y,z)
+			;}
+  };//end Visitor_N<3>
+struct ArgTypes_0
+  {
+        static
+      unsigned const
+    NARGS=0
+      ;
+  };
+template
+  < typename ARG_TYPES
+  , typename LAST_TYPE
+  >
+struct ArgTypes_N
+  : public ARG_TYPES
+  {
+        static
+      unsigned const
+    NARGS=ARG_TYPES::NARGS+1
+      ;
+        typedef
+      ARG_TYPES
+    ArgTypes
+      ;
+        typedef
+      LAST_TYPE
+    LastType
+      ;
+  };
+template
+  < unsigned NARGS
+  , typename ARG_TYPES
+  , unsigned NUNKNOWN=NARGS
+  >
+struct VisitorArgs
+  ;
+template
+  < typename ARG_TYPES
+  , unsigned NUNKNOWN
+  >
+struct VisitorArgs
+  < 3
+  , ARG_TYPES
+  , NUNKNOWN
+  >
+  : public AcceptorVisitor
+  , public Visitor<A>
+  , public Visitor<B>
+  , public Visitor<C>
+  {
+        static
+      unsigned const
+    NARGS=3
+      ;
+      Visitor_N<NARGS>&
+    m_visitor_N
+      ;
+    VisitorArgs
+      ( Visitor_N<NARGS>&a_visitor_N
+      )
+      : m_visitor_N(a_visitor_N)
+      {
+      ; unsigned nargs=ARG_TYPES::NARGS
+      ; m_visitor_N.m_args[nargs]->accept(*this)
+      ;}
+      void
+    accept(AcceptorVisitor&av)
+      { cerr
+        <<typeid(this).name()
+        <<"::accept(AcceptorVisitor) does nothing"
+        <<endl
+      ;}
+      void
+    visit(A&y)
+      { 
+      ; typedef ArgTypes_N<ARG_TYPES,A> ArgTypes_arg
+      ; VisitorArgs<NARGS,ArgTypes_arg,NARGS-ArgTypes_arg::NARGS> 
+			  visitor(m_visitor_N)
+      ;}
+      void
+    visit(B&y)
+      { 
+      ; typedef ArgTypes_N<ARG_TYPES,C> ArgTypes_arg
+      ; VisitorArgs<NARGS,ArgTypes_arg,NARGS-ArgTypes_arg::NARGS> 
+			  visitor(m_visitor_N)
+      ;}
+      void
+    visit(C&y)
+      { 
+      ; typedef ArgTypes_N<ARG_TYPES,C> ArgTypes_arg
+      ; VisitorArgs<NARGS,ArgTypes_arg,NARGS-ArgTypes_arg::NARGS> 
+			  visitor(m_visitor_N)
+      ;}
+  };//end VisitorArgs<3,,NUNKNOWN>
+
+template
+  < typename ARG_TYPES
+  >
+struct VisitorArgs
+  < 3
+  , ARG_TYPES
+  , 0
+  >
+  {
+        static
+      unsigned const
+    NARGS=3
+      ;
+    VisitorArgs
+      ( Visitor_N<NARGS>&a_visitor_N
+      )
+      {
+      ; typedef typename ARG_TYPES::ArgTypes::ArgTypes::LastType T0
+      ; typedef typename ARG_TYPES::ArgTypes::LastType T1
+      ; typedef typename ARG_TYPES::LastType T2
+      ; T0&a0=dynamic_cast<T0&>(*a_visitor_N.m_args[0])
+      ; T1&a1=dynamic_cast<T1&>(*a_visitor_N.m_args[1])
+      ; T2&a2=dynamic_cast<T2&>(*a_visitor_N.m_args[2])
+      ; a_visitor_N.visit(a0,a1,a2)
+      ;}
+  };//end VisitorArgs<3,,0>
+int main()
+  {
+  A a ;
+
+  Visitor_N<3> v3 ;
+  v3.m_args[0]=&a ;
+  v3.m_args[1]=&a ;
+  v3.m_args[2]=&a ;
+  VisitorArgs<3,ArgTypes_0> va3(v3) ;
+  return( 0 ) ;
+  }
